@@ -17,7 +17,7 @@ import requests
 # ---------- CONFIG: your Printify setup ----------
 BLUEPRINT_ID = 282          # Printify poster blueprint ID
 PRINT_PROVIDER_ID = 99      # print provider ID for that blueprint
-DESIRED_SIZES = ["8x10", "11x14", "12x16", "18x24", "24x36"]  # sizes to sell
+DESIRED_SIZES = ["8x10", "11x14", "12x16", "18x24", "24x32"]  # sizes to sell
 
 # Price per size, in cents. Based on typical Etsy unframed poster pricing
 # (bigger sizes carry a bigger margin, since print cost doesn't scale as
@@ -27,7 +27,7 @@ SIZE_PRICES_CENTS = {
     "11x14": 2299,
     "12x16": 2699,
     "18x24": 3499,
-    "24x36": 4499,
+    "24x32": 4299,
 }
 DEFAULT_PRICE_CENTS = 2499  # fallback if a size isn't in the table above
 # -------------------------------------------------------------------------
@@ -296,3 +296,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
