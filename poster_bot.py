@@ -248,25 +248,50 @@ def create_and_publish_product(image_id: str, title: str, description: str, vari
     print(f"Published product {product_id} to Etsy.")
 
 
+POSTERS_PER_RUN = 15  # how many new posters to publish each time this runs
+
+
 def main():
     shop_id = get_shop_id()
     variant_map = get_variant_ids()
 
-    prompt = build_prompt()
-    print(f"Generating image for prompt: {prompt}")
-    image_bytes = generate_image(prompt)
+    used_prompts = set()
+    successes = 0
+    failures = 0
 
-    file_name = "poster.png"
-    image_id = upload_image_to_printify(image_bytes, file_name)
-    print(f"Uploaded to Printify, image ID: {image_id}")
+    for i in range(1, POSTERS_PER_RUN + 1):
+        print(f"\n--- Poster {i} of {POSTERS_PER_RUN} ---")
 
-    title = prompt.split(",")[0].title() + " - Fine Art Print"
-    description = (
-        f"A striking, ultra-realistic wall art print. {prompt}. "
-        "Printed on premium poster paper, ready to frame."
-    )
+        # avoid generating the same prompt twice within the same run
+        prompt = build_prompt()
+        attempts = 0
+        while prompt in used_prompts and attempts < 10:
+            prompt = build_prompt()
+            attempts += 1
+        used_prompts.add(prompt)
 
-    create_and_publish_product(image_id, title, description, variant_map, shop_id)
+        try:
+            print(f"Generating image for prompt: {prompt}")
+            image_bytes = generate_image(prompt)
+
+            file_name = f"poster_{i}.png"
+            image_id = upload_image_to_printify(image_bytes, file_name)
+            print(f"Uploaded to Printify, image ID: {image_id}")
+
+            title = prompt.split(",")[0].title() + " - Fine Art Print"
+            description = (
+                f"A striking, ultra-realistic wall art print. {prompt}. "
+                "Printed on premium poster paper, ready to frame."
+            )
+
+            create_and_publish_product(image_id, title, description, variant_map, shop_id)
+            successes += 1
+        except Exception as e:
+            # one failed poster shouldn't stop the rest of the day's batch
+            print(f"Poster {i} failed: {e}")
+            failures += 1
+
+    print(f"\nDone. {successes} posters published, {failures} failed.")
 
 
 if __name__ == "__main__":
