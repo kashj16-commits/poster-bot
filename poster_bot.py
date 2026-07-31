@@ -18,7 +18,18 @@ import requests
 BLUEPRINT_ID = 282          # Printify poster blueprint ID
 PRINT_PROVIDER_ID = 99      # print provider ID for that blueprint
 DESIRED_SIZES = ["8x10", "11x14", "12x16", "18x24", "24x36"]  # sizes to sell
-RETAIL_PRICE_CENTS = 2999   # what YOU charge the customer, in cents ($29.99)
+
+# Price per size, in cents. Based on typical Etsy unframed poster pricing
+# (bigger sizes carry a bigger margin, since print cost doesn't scale as
+# fast as what buyers are willing to pay for a larger piece).
+SIZE_PRICES_CENTS = {
+    "8x10": 1799,
+    "11x14": 2299,
+    "12x16": 2699,
+    "18x24": 3499,
+    "24x36": 4499,
+}
+DEFAULT_PRICE_CENTS = 2499  # fallback if a size isn't in the table above
 # -------------------------------------------------------------------------
 
 FAL_KEY = os.environ["FAL_KEY"]
@@ -105,11 +116,13 @@ def build_prompt() -> str:
 
 
 def generate_image(prompt: str) -> bytes:
-    """Call fal.ai Flux Schnell to generate an image, return raw image bytes."""
+    """Call fal.ai Flux Schnell to generate an image, return raw image bytes.
+    Uses a tall portrait size so the art fills poster shapes edge-to-edge
+    (most poster sizes are close to a 3:4 or 2:3 portrait ratio)."""
     resp = requests.post(
         "https://fal.run/fal-ai/flux/schnell",
         headers={"Authorization": f"Key {FAL_KEY}"},
-        json={"prompt": prompt, "image_size": "square_hd", "num_images": 1},
+        json={"prompt": prompt, "image_size": "portrait_4_3", "num_images": 1},
         timeout=60,
     )
     resp.raise_for_status()
@@ -121,10 +134,10 @@ def generate_image(prompt: str) -> bytes:
     return img_resp.content
 
 
-def get_variant_ids() -> list:
+def get_variant_ids() -> dict:
     """Look up Printify's variant IDs for our blueprint/provider that match
     the sizes we want to sell (e.g. '8x10', '18x24'), so we never have to
-    hunt for these numbers by hand."""
+    hunt for these numbers by hand. Returns {size: variant_id}."""
     resp = requests.get(
         f"https://api.printify.com/v1/catalog/blueprints/{BLUEPRINT_ID}"
         f"/print_providers/{PRINT_PROVIDER_ID}/variants.json",
@@ -141,25 +154,23 @@ def get_variant_ids() -> list:
         return "x".join(nums[:2])
 
     wanted = set(DESIRED_SIZES)
-    matched_ids = []
-    matched_sizes = []
+    matched = {}
     for v in variants:
         norm = normalize(v["title"])
-        if norm in wanted and norm not in matched_sizes:
-            matched_ids.append(v["id"])
-            matched_sizes.append(norm)
+        if norm in wanted and norm not in matched:
+            matched[norm] = v["id"]
 
-    missing = wanted - set(matched_sizes)
+    missing = wanted - set(matched.keys())
     if missing:
         print(f"Warning: couldn't find these sizes in Printify's catalog: {missing}")
-    if not matched_ids:
+    if not matched:
         raise RuntimeError(
             "No matching variants found. Check BLUEPRINT_ID, PRINT_PROVIDER_ID, "
             "and DESIRED_SIZES."
         )
 
-    print(f"Matched sizes: {matched_sizes} -> variant IDs {matched_ids}")
-    return matched_ids
+    print(f"Matched sizes -> variant IDs: {matched}")
+    return matched
 
 
 def upload_image_to_printify(image_bytes: bytes, file_name: str) -> str:
@@ -175,16 +186,23 @@ def upload_image_to_printify(image_bytes: bytes, file_name: str) -> str:
     return resp.json()["id"]
 
 
-def create_and_publish_product(image_id: str, title: str, description: str, variant_ids: list, shop_id: str):
-    """Create a poster product on Printify with the uploaded image, then publish to Etsy."""
+def create_and_publish_product(image_id: str, title: str, description: str, variant_map: dict, shop_id: str):
+    """Create a poster product on Printify with the uploaded image, then publish to Etsy.
+    variant_map is {size_string: variant_id}."""
+    variant_ids = list(variant_map.values())
+
     product_payload = {
         "title": title,
         "description": description,
         "blueprint_id": BLUEPRINT_ID,
         "print_provider_id": PRINT_PROVIDER_ID,
         "variants": [
-            {"id": vid, "price": RETAIL_PRICE_CENTS, "is_enabled": True}
-            for vid in variant_ids
+            {
+                "id": vid,
+                "price": SIZE_PRICES_CENTS.get(size, DEFAULT_PRICE_CENTS),
+                "is_enabled": True,
+            }
+            for size, vid in variant_map.items()
         ],
         "print_areas": [
             {
@@ -193,7 +211,11 @@ def create_and_publish_product(image_id: str, title: str, description: str, vari
                     {
                         "position": "front",
                         "images": [
-                            {"id": image_id, "x": 0.5, "y": 0.5, "scale": 1, "angle": 0}
+                            # scale slightly above 1 so the image fully
+                            # bleeds to the poster's edges with no white
+                            # border, even if the aspect ratio doesn't
+                            # match a given size exactly
+                            {"id": image_id, "x": 0.5, "y": 0.5, "scale": 1.05, "angle": 0}
                         ],
                     }
                 ],
@@ -228,7 +250,7 @@ def create_and_publish_product(image_id: str, title: str, description: str, vari
 
 def main():
     shop_id = get_shop_id()
-    variant_ids = get_variant_ids()
+    variant_map = get_variant_ids()
 
     prompt = build_prompt()
     print(f"Generating image for prompt: {prompt}")
@@ -244,9 +266,8 @@ def main():
         "Printed on premium poster paper, ready to frame."
     )
 
-    create_and_publish_product(image_id, title, description, variant_ids, shop_id)
+    create_and_publish_product(image_id, title, description, variant_map, shop_id)
 
 
 if __name__ == "__main__":
     main()
-
