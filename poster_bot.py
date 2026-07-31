@@ -49,14 +49,59 @@ def get_shop_id() -> str:
     print(f"Using shop: {chosen['title']} (id: {chosen['id']})")
     return str(chosen["id"])
 
-PROMPTS = [
-    "ultra-realistic New York City skyline at golden hour, cinematic lighting, 8k detail",
-    "sleek matte black sports car, studio lighting, minimalist background, photorealistic",
-    "Tokyo skyline at night, neon reflections, ultra-realistic, cinematic",
-    "elegant silver sports car on empty highway at sunset, photorealistic, dramatic lighting",
-    "Chicago skyline from the lake, blue hour, ultra-realistic architectural photography",
-    "vintage convertible on coastal road, golden hour, photorealistic detail",
+CITIES = [
+    "New York City", "Tokyo", "Paris", "London", "Chicago", "Dubai",
+    "Singapore", "Hong Kong", "Sydney", "San Francisco", "Seattle",
+    "Miami", "Los Angeles", "Shanghai", "Toronto", "Vancouver",
+    "Barcelona", "Rome", "Amsterdam", "Venice",
 ]
+
+CARS = [
+    "matte black sports car", "silver sports coupe", "classic vintage convertible",
+    "sleek electric hypercar", "chrome muscle car", "midnight blue grand tourer",
+    "white minimalist sports sedan", "matte grey rally car", "red vintage roadster",
+    "carbon fiber supercar",
+]
+
+TIMES = [
+    "golden hour", "blue hour at dusk", "neon-lit night", "sunrise",
+    "foggy overcast morning", "dramatic storm light", "twilight",
+]
+
+STYLES = [
+    "cinematic lighting, 8k detail", "ultra-realistic architectural photography",
+    "moody atmospheric tone", "high contrast dramatic shading",
+    "minimalist composition", "vibrant color grading",
+]
+
+CITY_SCENES = [
+    "aerial view of a rooftop overlooking",
+    "waterfront view of",
+    "street-level view looking up at",
+    "wide panoramic skyline of",
+]
+
+CAR_SCENES = [
+    "on an empty highway",
+    "parked on a coastal road",
+    "in a minimalist studio setting",
+    "on a rain-slicked city street",
+]
+
+
+def build_prompt() -> str:
+    """Build a photo-realistic poster prompt from independent detail lists.
+    Combining city/car x scene x time x style gives thousands of distinct
+    combinations, so daily posters stay fresh instead of repeating a short
+    fixed list."""
+    if random.random() < 0.5:
+        subject = f"{random.choice(CITY_SCENES)} the {random.choice(CITIES)} skyline"
+    else:
+        subject = f"{random.choice(CARS)} {random.choice(CAR_SCENES)}"
+
+    time_of_day = random.choice(TIMES)
+    style = random.choice(STYLES)
+    return f"ultra-realistic {subject}, {time_of_day}, {style}, photorealistic"
 
 
 def generate_image(prompt: str) -> bytes:
@@ -185,7 +230,7 @@ def main():
     shop_id = get_shop_id()
     variant_ids = get_variant_ids()
 
-    prompt = random.choice(PROMPTS)
+    prompt = build_prompt()
     print(f"Generating image for prompt: {prompt}")
     image_bytes = generate_image(prompt)
 
@@ -204,3 +249,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
